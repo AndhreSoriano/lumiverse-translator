@@ -1,19 +1,22 @@
 export const TRANSLATOR_STYLES = `
-/* Espacio superior limpio en burbujas del bot para el botón en la esquina superior izquierda */
-[data-message-id][data-lumi-tr-bot="true"] {
-  position: relative !important;
-  padding-top: 34px !important;
+/* Espacio superior limpio SOLO en la tarjeta interna del bot (nunca en la fila virtualizada [data-virtual-index]) */
+[data-message-id]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
+  padding-top: 34px;
+}
+
+[data-component="BubbleMessage"]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
+  padding-top: 30px;
 }
 
 /* Host wrapper creado por ctx.dom.inject */
 .lumi-tr-btn-host {
-  position: absolute !important;
-  top: 7px !important;
-  left: 10px !important;
-  z-index: 15 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  pointer-events: auto !important;
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: auto;
 }
 
 .lumi-tr-btn-wrap {
@@ -89,13 +92,13 @@ export const TRANSLATOR_STYLES = `
 }
 
 /* Reemplazo visual no destructivo: oculta el texto original en pantalla sin tocar el DOM de React */
-[data-message-id][data-lumi-tr-view="replace"] [data-component="MessageContent"] {
+[data-message-id]:not([data-virtual-index])[data-lumi-tr-view="replace"] [data-component="MessageContent"] {
   display: none !important;
 }
 
 /* Si el usuario está editando el mensaje, ocultar la traducción para dejar visible el editor */
-[data-message-id]:has([data-component="MessageEditArea"]) .lumi-tr-panel-host,
-[data-message-id]:has(textarea) .lumi-tr-panel-host {
+[data-message-id]:not([data-virtual-index]):has([data-component="MessageEditArea"]) .lumi-tr-panel-host,
+[data-message-id]:not([data-virtual-index]):has(textarea) .lumi-tr-panel-host {
   display: none !important;
 }
 

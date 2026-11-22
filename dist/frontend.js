@@ -123,22 +123,14 @@ function makeSwitchRow(parent, labelText, hintText) {
   parent.appendChild(container);
   return slot;
 }
-function createDrawerMenu(ctx, initialConfig, callbacks) {
+function mountTranslatorPanel(ctx, hostRoot, initialConfig, callbacks) {
   let currentConfig = { ...initialConfig };
   let currentCacheCount = 0;
   let syncing = false;
   const timers = /* @__PURE__ */ new Set();
-  const tab = ctx.ui.registerDrawerTab({
-    id: "lumi-translator",
-    title: "Traductor",
-    shortName: "Traducir",
-    description: "Traduce mensajes del bot/personaje con Google Translate y otros motores",
-    keywords: ["translate", "traducir", "traductor", "idioma", "google", "deepl"],
-    iconSvg: TRANSLATOR_ICON_SVG
-  });
   const root = document.createElement("div");
   root.className = "lumi-tr-drawer";
-  tab.root.appendChild(root);
+  hostRoot.appendChild(root);
   const headerCard = document.createElement("div");
   headerCard.className = "lumi-tr-header-card";
   const titleCol = document.createElement("div");
@@ -448,7 +440,54 @@ function createDrawerMenu(ctx, initialConfig, callbacks) {
       deeplKeyInput.destroy();
       myMemoryEmailInput.destroy();
       providerCollapsible.destroy();
-      tab.destroy();
+      root.remove();
+    }
+  };
+}
+function createDrawerMenu(ctx, initialConfig, callbacks) {
+  const panels = [];
+  const disposers = [];
+  const drawerTab = ctx.ui.registerDrawerTab({
+    id: "lumi-translator",
+    title: "Traductor",
+    shortName: "Traducir",
+    description: "Traduce mensajes del bot/personaje con Google Translate y otros motores",
+    keywords: ["translate", "traducir", "traductor", "idioma", "google", "deepl"],
+    iconSvg: TRANSLATOR_ICON_SVG
+  });
+  panels.push(mountTranslatorPanel(ctx, drawerTab.root, initialConfig, callbacks));
+  disposers.push(() => drawerTab.destroy());
+  if (typeof ctx.ui.registerSettingsTab === "function") {
+    try {
+      const settingsTab = ctx.ui.registerSettingsTab({
+        id: "lumi-translator",
+        title: "Traductor",
+        shortName: "Traducir",
+        description: "Configura idioma, motor de traducci\xF3n y traducci\xF3n autom\xE1tica",
+        keywords: ["translate", "traducir", "traductor", "idioma", "google", "deepl"],
+        position: "bottom",
+        iconSvg: TRANSLATOR_ICON_SVG
+      });
+      panels.push(mountTranslatorPanel(ctx, settingsTab.root, initialConfig, callbacks));
+      disposers.push(() => settingsTab.destroy());
+    } catch {
+    }
+  }
+  return {
+    syncConfig(config, cacheCount) {
+      for (const panel of panels) panel.syncConfig(config, cacheCount);
+    },
+    setNeedsCorsPermission(needs) {
+      for (const panel of panels) panel.setNeedsCorsPermission(needs);
+    },
+    destroy() {
+      for (const panel of panels) panel.destroy();
+      for (const dispose of disposers) {
+        try {
+          dispose();
+        } catch {
+        }
+      }
     }
   };
 }
@@ -642,12 +681,40 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
       });
     }
   }
-  function isBotMessage(messageId, bubbleEl) {
+  function resolveInnerMessageCard(el) {
+    if (!el) return null;
+    if (!el.hasAttribute("data-virtual-index")) return el;
+    return el.querySelector("[data-message-id]:not([data-virtual-index])");
+  }
+  function listInnerMessageCards() {
+    const byId = /* @__PURE__ */ new Map();
+    for (const { messageId, element } of ctx.dom.listMessageElements()) {
+      if (element.hasAttribute("data-virtual-index")) continue;
+      if (!byId.has(messageId)) {
+        byId.set(messageId, element);
+      }
+    }
+    return Array.from(byId, ([messageId, element]) => ({ messageId, element }));
+  }
+  function findInnerCardById(messageId) {
+    for (const item of ctx.dom.listMessageElements()) {
+      if (item.messageId === messageId && !item.element.hasAttribute("data-virtual-index")) {
+        return item.element;
+      }
+    }
+    return resolveInnerMessageCard(ctx.dom.findMessageElement(messageId));
+  }
+  function isBotMessage(messageId, cardEl) {
     const meta = metaByMessageId.get(messageId);
     if (meta) return !meta.isUser;
-    const part = bubbleEl.getAttribute("data-part");
+    const part = cardEl.getAttribute("data-part");
     if (part === "user") return false;
     if (part === "character" || part === "streaming") return true;
+    const cls = typeof cardEl.className === "string" ? cardEl.className : "";
+    const hasChar = /(?:^|[\s_-])character(?:$|[\s_-])/i.test(cls);
+    const hasUser = /(?:^|[\s_-])user(?:$|[\s_-])/i.test(cls);
+    if (hasUser && !hasChar) return false;
+    if (hasChar) return true;
     return false;
   }
   function updateButtonVisual(messageId, btn) {
@@ -809,7 +876,7 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
       } catch {
       }
     }
-    const bubbleEl = ctx.dom.findMessageElement(messageId);
+    const bubbleEl = findInnerCardById(messageId);
     const fallbackText = bubbleEl ? extractFallbackDomText(bubbleEl) : void 0;
     sendToBackend({
       type: "translate_message",
@@ -833,7 +900,7 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
     await requestTranslation(messageId);
   }
   function refreshMessageUi(messageId) {
-    const bubbleEl = ctx.dom.findMessageElement(messageId);
+    const bubbleEl = findInnerCardById(messageId);
     if (!bubbleEl) return;
     ensureButtonForMessage(messageId, bubbleEl);
   }
@@ -843,7 +910,7 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
     if (currentChat !== activeChatId) {
       handleChatSwitch(currentChat);
     }
-    const mounted = ctx.dom.listMessageElements();
+    const mounted = listInnerMessageCards();
     const mountedIds = /* @__PURE__ */ new Set();
     for (const { messageId, element } of mounted) {
       mountedIds.add(messageId);
@@ -868,13 +935,13 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
   function clearAllInjections() {
     for (const [id, inj] of buttonInjections) {
       ctx.dom.uninject(inj.wrapper);
-      const el = ctx.dom.findMessageElement(id);
+      const el = findInnerCardById(id);
       el?.removeAttribute("data-lumi-tr-bot");
     }
     buttonInjections.clear();
     for (const [id, inj] of panelInjections) {
       ctx.dom.uninject(inj.wrapper);
-      const el = ctx.dom.findMessageElement(id);
+      const el = findInnerCardById(id);
       el?.removeAttribute("data-lumi-tr-view");
     }
     panelInjections.clear();
@@ -1037,7 +1104,7 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
     },
     translateVisibleBotMessages() {
       if (!config.enabled) return;
-      const mounted = ctx.dom.listMessageElements();
+      const mounted = listInnerMessageCards();
       for (const { messageId, element } of mounted) {
         if (!isBotMessage(messageId, element)) continue;
         const existing = sessionTranslations.get(messageId);
@@ -1080,21 +1147,24 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
 
 // src/frontend/styles.ts
 var TRANSLATOR_STYLES = `
-/* Espacio superior limpio en burbujas del bot para el bot\xF3n en la esquina superior izquierda */
-[data-message-id][data-lumi-tr-bot="true"] {
-  position: relative !important;
-  padding-top: 34px !important;
+/* Espacio superior limpio SOLO en la tarjeta interna del bot (nunca en la fila virtualizada [data-virtual-index]) */
+[data-message-id]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
+  padding-top: 34px;
+}
+
+[data-component="BubbleMessage"]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
+  padding-top: 30px;
 }
 
 /* Host wrapper creado por ctx.dom.inject */
 .lumi-tr-btn-host {
-  position: absolute !important;
-  top: 7px !important;
-  left: 10px !important;
-  z-index: 15 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  pointer-events: auto !important;
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: auto;
 }
 
 .lumi-tr-btn-wrap {
@@ -1170,13 +1240,13 @@ var TRANSLATOR_STYLES = `
 }
 
 /* Reemplazo visual no destructivo: oculta el texto original en pantalla sin tocar el DOM de React */
-[data-message-id][data-lumi-tr-view="replace"] [data-component="MessageContent"] {
+[data-message-id]:not([data-virtual-index])[data-lumi-tr-view="replace"] [data-component="MessageContent"] {
   display: none !important;
 }
 
 /* Si el usuario est\xE1 editando el mensaje, ocultar la traducci\xF3n para dejar visible el editor */
-[data-message-id]:has([data-component="MessageEditArea"]) .lumi-tr-panel-host,
-[data-message-id]:has(textarea) .lumi-tr-panel-host {
+[data-message-id]:not([data-virtual-index]):has([data-component="MessageEditArea"]) .lumi-tr-panel-host,
+[data-message-id]:not([data-virtual-index]):has(textarea) .lumi-tr-panel-host {
   display: none !important;
 }
 

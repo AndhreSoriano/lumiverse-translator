@@ -118,8 +118,9 @@ function makeSwitchRow(
   return slot
 }
 
-export function createDrawerMenu(
+function mountTranslatorPanel(
   ctx: SpindleFrontendContext,
+  hostRoot: HTMLElement,
   initialConfig: TranslatorConfig,
   callbacks: DrawerMenuCallbacks,
 ): DrawerMenuHandle {
@@ -128,18 +129,9 @@ export function createDrawerMenu(
   let syncing = false
   const timers = new Set<ReturnType<typeof setTimeout>>()
 
-  const tab = ctx.ui.registerDrawerTab({
-    id: 'lumi-translator',
-    title: 'Traductor',
-    shortName: 'Traducir',
-    description: 'Traduce mensajes del bot/personaje con Google Translate y otros motores',
-    keywords: ['translate', 'traducir', 'traductor', 'idioma', 'google', 'deepl'],
-    iconSvg: TRANSLATOR_ICON_SVG,
-  })
-
   const root = document.createElement('div')
   root.className = 'lumi-tr-drawer'
-  tab.root.appendChild(root)
+  hostRoot.appendChild(root)
 
   // Header
   const headerCard = document.createElement('div')
@@ -491,7 +483,64 @@ export function createDrawerMenu(
       deeplKeyInput.destroy()
       myMemoryEmailInput.destroy()
       providerCollapsible.destroy()
-      tab.destroy()
+      root.remove()
+    },
+  }
+}
+
+export function createDrawerMenu(
+  ctx: SpindleFrontendContext,
+  initialConfig: TranslatorConfig,
+  callbacks: DrawerMenuCallbacks,
+): DrawerMenuHandle {
+  const panels: DrawerMenuHandle[] = []
+  const disposers: Array<() => void> = []
+
+  const drawerTab = ctx.ui.registerDrawerTab({
+    id: 'lumi-translator',
+    title: 'Traductor',
+    shortName: 'Traducir',
+    description: 'Traduce mensajes del bot/personaje con Google Translate y otros motores',
+    keywords: ['translate', 'traducir', 'traductor', 'idioma', 'google', 'deepl'],
+    iconSvg: TRANSLATOR_ICON_SVG,
+  })
+  panels.push(mountTranslatorPanel(ctx, drawerTab.root, initialConfig, callbacks))
+  disposers.push(() => drawerTab.destroy())
+
+  if (typeof ctx.ui.registerSettingsTab === 'function') {
+    try {
+      const settingsTab = ctx.ui.registerSettingsTab({
+        id: 'lumi-translator',
+        title: 'Traductor',
+        shortName: 'Traducir',
+        description: 'Configura idioma, motor de traducción y traducción automática',
+        keywords: ['translate', 'traducir', 'traductor', 'idioma', 'google', 'deepl'],
+        position: 'bottom',
+        iconSvg: TRANSLATOR_ICON_SVG,
+      })
+      panels.push(mountTranslatorPanel(ctx, settingsTab.root, initialConfig, callbacks))
+      disposers.push(() => settingsTab.destroy())
+    } catch {
+      // Older hosts without registerSettingsTab fall back gracefully to the Drawer Tab
+    }
+  }
+
+  return {
+    syncConfig(config: TranslatorConfig, cacheCount?: number) {
+      for (const panel of panels) panel.syncConfig(config, cacheCount)
+    },
+    setNeedsCorsPermission(needs: boolean) {
+      for (const panel of panels) panel.setNeedsCorsPermission(needs)
+    },
+    destroy() {
+      for (const panel of panels) panel.destroy()
+      for (const dispose of disposers) {
+        try {
+          dispose()
+        } catch {
+          // ignore
+        }
+      }
     },
   }
 }

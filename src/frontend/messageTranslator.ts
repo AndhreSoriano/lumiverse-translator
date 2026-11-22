@@ -151,12 +151,45 @@ export function createMessageTranslator(
     }
   }
 
-  function isBotMessage(messageId: string, bubbleEl: Element): boolean {
+  function resolveInnerMessageCard(el: Element | null): Element | null {
+    if (!el) return null
+    if (!el.hasAttribute('data-virtual-index')) return el
+    return el.querySelector('[data-message-id]:not([data-virtual-index])')
+  }
+
+  function listInnerMessageCards(): Array<{ messageId: string; element: Element }> {
+    const byId = new Map<string, Element>()
+    for (const { messageId, element } of ctx.dom.listMessageElements()) {
+      if (element.hasAttribute('data-virtual-index')) continue
+      if (!byId.has(messageId)) {
+        byId.set(messageId, element)
+      }
+    }
+    return Array.from(byId, ([messageId, element]) => ({ messageId, element }))
+  }
+
+  function findInnerCardById(messageId: string): Element | null {
+    for (const item of ctx.dom.listMessageElements()) {
+      if (item.messageId === messageId && !item.element.hasAttribute('data-virtual-index')) {
+        return item.element
+      }
+    }
+    return resolveInnerMessageCard(ctx.dom.findMessageElement(messageId))
+  }
+
+  function isBotMessage(messageId: string, cardEl: Element): boolean {
     const meta = metaByMessageId.get(messageId)
     if (meta) return !meta.isUser
-    const part = bubbleEl.getAttribute('data-part')
+    const part = cardEl.getAttribute('data-part')
     if (part === 'user') return false
     if (part === 'character' || part === 'streaming') return true
+
+    // Fallback para MinimalMessage antes de recibir metadatos del backend
+    const cls = typeof cardEl.className === 'string' ? cardEl.className : ''
+    const hasChar = /(?:^|[\s_-])character(?:$|[\s_-])/i.test(cls)
+    const hasUser = /(?:^|[\s_-])user(?:$|[\s_-])/i.test(cls)
+    if (hasUser && !hasChar) return false
+    if (hasChar) return true
     return false
   }
 
@@ -351,7 +384,7 @@ export function createMessageTranslator(
       }
     }
 
-    const bubbleEl = ctx.dom.findMessageElement(messageId)
+    const bubbleEl = findInnerCardById(messageId)
     const fallbackText = bubbleEl ? extractFallbackDomText(bubbleEl) : undefined
 
     sendToBackend({
@@ -386,7 +419,7 @@ export function createMessageTranslator(
   }
 
   function refreshMessageUi(messageId: string): void {
-    const bubbleEl = ctx.dom.findMessageElement(messageId)
+    const bubbleEl = findInnerCardById(messageId)
     if (!bubbleEl) return
     ensureButtonForMessage(messageId, bubbleEl)
   }
@@ -398,7 +431,7 @@ export function createMessageTranslator(
       handleChatSwitch(currentChat)
     }
 
-    const mounted = ctx.dom.listMessageElements()
+    const mounted = listInnerMessageCards()
     const mountedIds = new Set<string>()
     for (const { messageId, element } of mounted) {
       mountedIds.add(messageId)
@@ -427,14 +460,14 @@ export function createMessageTranslator(
   function clearAllInjections(): void {
     for (const [id, inj] of buttonInjections) {
       ctx.dom.uninject(inj.wrapper)
-      const el = ctx.dom.findMessageElement(id)
+      const el = findInnerCardById(id)
       el?.removeAttribute('data-lumi-tr-bot')
     }
     buttonInjections.clear()
 
     for (const [id, inj] of panelInjections) {
       ctx.dom.uninject(inj.wrapper)
-      const el = ctx.dom.findMessageElement(id)
+      const el = findInnerCardById(id)
       el?.removeAttribute('data-lumi-tr-view')
     }
     panelInjections.clear()
@@ -646,7 +679,7 @@ export function createMessageTranslator(
 
     translateVisibleBotMessages() {
       if (!config.enabled) return
-      const mounted = ctx.dom.listMessageElements()
+      const mounted = listInnerMessageCards()
       for (const { messageId, element } of mounted) {
         if (!isBotMessage(messageId, element)) continue
         const existing = sessionTranslations.get(messageId)

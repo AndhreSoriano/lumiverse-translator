@@ -271,6 +271,13 @@ test('Markdown renderer formatea roleplay y neutraliza payloads XSS', () => {
   assert.ok(!html.includes('javascript:'))
 })
 
+const frontendStyles = await importTsBundle('src/frontend/styles.ts')
+
+test('CSS no sobreescribe position de filas virtualizadas ni [data-virtual-index]', () => {
+  assert.ok(!/\[data-message-id\]\s*\[data-lumi-tr-bot="true"\]\s*\{[^}]*position\s*:/i.test(frontendStyles.TRANSLATOR_STYLES))
+  assert.ok(frontendStyles.TRANSLATOR_STYLES.includes('[data-message-id]:not([data-virtual-index])'))
+})
+
 test('Integridad de spindle.json y bundles dist/backend.js + dist/frontend.js', async () => {
   const manifest = JSON.parse(readFileSync(resolve(root, 'spindle.json'), 'utf8'))
   assert.match(manifest.identifier, /^[a-z][a-z0-9_]*$/)
@@ -286,6 +293,8 @@ test('Integridad de spindle.json y bundles dist/backend.js + dist/frontend.js', 
 
   const frontendCode = readFileSync(resolve(root, 'dist/frontend.js'), 'utf8')
   assert.ok(frontendCode.length > 500)
+  assert.ok(frontendCode.includes('data-virtual-index'))
+  assert.ok(frontendCode.includes('registerSettingsTab'))
   const frontendMod = await import(
     `data:text/javascript;base64,${Buffer.from(frontendCode, 'utf8').toString('base64')}`
   )
