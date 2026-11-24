@@ -1,15 +1,19 @@
 export const TRANSLATOR_STYLES = `
-/* Espacio superior limpio SOLO en la tarjeta interna del bot (nunca en la fila virtualizada [data-virtual-index]) */
-[data-message-id]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
-  padding-top: 34px;
+/* En escritorio dejamos espacio superior limpio SOLO en la tarjeta interna del bot.
+   En móvil (<= 768px) Lumiverse ya reserva 30px-38px arriba, así añadimos 0px de altura extra. */
+@media (min-width: 769px) {
+  [data-message-id]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
+    padding-top: 34px;
+  }
+
+  [data-component="BubbleMessage"]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
+    padding-top: 30px;
+  }
 }
 
-[data-component="BubbleMessage"]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
-  padding-top: 30px;
-}
-
-/* Host wrapper creado por ctx.dom.inject */
-.lumi-tr-btn-host {
+/* Host wrapper creado por ctx.dom.inject (incluye selector :has para replay de virtualización) */
+.lumi-tr-btn-host,
+[data-spindle-inj-id]:has(> .lumi-tr-btn-wrap) {
   position: absolute;
   top: 6px;
   left: 10px;
@@ -39,6 +43,7 @@ export const TRANSLATOR_STYLES = `
   line-height: 1;
   cursor: pointer;
   user-select: none;
+  touch-action: manipulation;
   backdrop-filter: blur(8px);
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }

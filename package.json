@@ -1,6 +1,6 @@
 {
   "name": "lumiverse-translator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Extensión nativa Spindle para Lumiverse que traduce mensajes del bot/personaje con Google Translate y otros proveedores.",

@@ -276,10 +276,15 @@ const frontendStyles = await importTsBundle('src/frontend/styles.ts')
 test('CSS no sobreescribe position de filas virtualizadas ni [data-virtual-index]', () => {
   assert.ok(!/\[data-message-id\]\s*\[data-lumi-tr-bot="true"\]\s*\{[^}]*position\s*:/i.test(frontendStyles.TRANSLATOR_STYLES))
   assert.ok(frontendStyles.TRANSLATOR_STYLES.includes('[data-message-id]:not([data-virtual-index])'))
+  assert.ok(frontendStyles.TRANSLATOR_STYLES.includes('@media (min-width: 769px)'))
+  assert.ok(frontendStyles.TRANSLATOR_STYLES.includes('[data-spindle-inj-id]:has(> .lumi-tr-btn-wrap)'))
 })
 
 test('Integridad de spindle.json y bundles dist/backend.js + dist/frontend.js', async () => {
   const manifest = JSON.parse(readFileSync(resolve(root, 'spindle.json'), 'utf8'))
+  const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
+  assert.equal(manifest.version, '0.1.1')
+  assert.equal(manifest.version, pkg.version)
   assert.match(manifest.identifier, /^[a-z][a-z0-9_]*$/)
   assert.deepEqual(manifest.permissions, ['cors_proxy', 'chats'])
   assert.equal(manifest.entry_backend, 'dist/backend.js')

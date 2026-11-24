@@ -431,6 +431,14 @@ export function createMessageTranslator(
       handleChatSwitch(currentChat)
     }
 
+    // Limpia cualquier atributo residual en filas externas virtualizadas [data-virtual-index]
+    for (const { element } of ctx.dom.listMessageElements()) {
+      if (element.hasAttribute('data-virtual-index')) {
+        if (element.hasAttribute('data-lumi-tr-bot')) element.removeAttribute('data-lumi-tr-bot')
+        if (element.hasAttribute('data-lumi-tr-view')) element.removeAttribute('data-lumi-tr-view')
+      }
+    }
+
     const mounted = listInnerMessageCards()
     const mountedIds = new Set<string>()
     for (const { messageId, element } of mounted) {

@@ -910,6 +910,12 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
     if (currentChat !== activeChatId) {
       handleChatSwitch(currentChat);
     }
+    for (const { element } of ctx.dom.listMessageElements()) {
+      if (element.hasAttribute("data-virtual-index")) {
+        if (element.hasAttribute("data-lumi-tr-bot")) element.removeAttribute("data-lumi-tr-bot");
+        if (element.hasAttribute("data-lumi-tr-view")) element.removeAttribute("data-lumi-tr-view");
+      }
+    }
     const mounted = listInnerMessageCards();
     const mountedIds = /* @__PURE__ */ new Set();
     for (const { messageId, element } of mounted) {
@@ -1147,17 +1153,21 @@ function createMessageTranslator(ctx, initialConfig, onNeedsCorsPermission) {
 
 // src/frontend/styles.ts
 var TRANSLATOR_STYLES = `
-/* Espacio superior limpio SOLO en la tarjeta interna del bot (nunca en la fila virtualizada [data-virtual-index]) */
-[data-message-id]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
-  padding-top: 34px;
+/* En escritorio dejamos espacio superior limpio SOLO en la tarjeta interna del bot.
+   En m\xF3vil (<= 768px) Lumiverse ya reserva 30px-38px arriba, as\xED a\xF1adimos 0px de altura extra. */
+@media (min-width: 769px) {
+  [data-message-id]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
+    padding-top: 34px;
+  }
+
+  [data-component="BubbleMessage"]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
+    padding-top: 30px;
+  }
 }
 
-[data-component="BubbleMessage"]:not([data-virtual-index])[data-lumi-tr-bot="true"] {
-  padding-top: 30px;
-}
-
-/* Host wrapper creado por ctx.dom.inject */
-.lumi-tr-btn-host {
+/* Host wrapper creado por ctx.dom.inject (incluye selector :has para replay de virtualizaci\xF3n) */
+.lumi-tr-btn-host,
+[data-spindle-inj-id]:has(> .lumi-tr-btn-wrap) {
   position: absolute;
   top: 6px;
   left: 10px;
@@ -1187,6 +1197,7 @@ var TRANSLATOR_STYLES = `
   line-height: 1;
   cursor: pointer;
   user-select: none;
+  touch-action: manipulation;
   backdrop-filter: blur(8px);
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }
